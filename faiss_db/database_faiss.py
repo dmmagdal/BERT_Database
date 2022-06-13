@@ -1,4 +1,4 @@
-# bert_db_faiss.py
+# database_faiss.py
 # Implement BERT KNN database with faiss.
 # Source on faiss: https://www.youtube.com/watch?v=sKyvsdEv6rk
 # Tensorflow 2.7.0
@@ -401,7 +401,6 @@ class BERTDatabase:
 			assert len(self.data) == self.index.ntotal, f"Number of embedings in index should match dataset size. Index embeddings {self.index.ntotal}, Dataset size: {len(self.data)}"
 
 
-
 	# Delete (entry, continuation) pairs from the database given the
 	# keys (entry).
 	# @param: keys, list of strings containing the text entries to be
@@ -746,7 +745,9 @@ if __name__ == '__main__':
 	# database.
 
 	# Start by populating the entire database with all (key, value)
-	# pairs.
+	# pairs. Be sure to reset the contents of the index before
+	# populating it.
+	db.index.reset()
 	db.add(list(zip(entries, values)))
 	
 	# Get KNN entries from batch.

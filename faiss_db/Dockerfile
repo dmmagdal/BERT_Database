@@ -1,4 +1,4 @@
-# Docker file to run a container that will run the bert_db_faiss.py
+# Docker file to run a container that will run the database_faiss.py
 # in Python 3 for Tensorflow 2.7.0 (no GPU).
 
 # Load tensorflow image for tensorflow 2.7.0 and Python 3.
@@ -23,5 +23,5 @@ ADD . /bert-db
 RUN python3 -m pip install --upgrade pip
 RUN pip3 install -r requirements.txt
 
-# Run the bert_db_faiss.py program.
-CMD ["python3", "bert_db_faiss.py"]
+# Run the database_faiss.py program.
+CMD ["python3", "database_faiss.py"]

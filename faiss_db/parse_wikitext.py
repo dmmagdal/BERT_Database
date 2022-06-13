@@ -12,7 +12,7 @@ import tensorflow as tf
 from datasets import load_dataset
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
-from bert_db_faiss import *
+from database_faiss import *
 
 
 # Divide a tensor of shape (max_seq_len,) into chunks of size n.
