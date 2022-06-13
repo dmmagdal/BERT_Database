@@ -190,7 +190,8 @@ class BERTDatabase:
 		self.index.nprobe = self.nprobe
 		self.k = 2
 
-		self.batch_size = 256
+		# Batch size to pass break up data when training the index.
+		self.batch_size = 256 # 512
 
 		# Save file name for data.
 		self.file = "bert_db_data.pkl"
@@ -238,8 +239,6 @@ class BERTDatabase:
 			dtype=tf.string
 		)
 
-		# print(len(self.data))
-
 		# Break up inputs into chunks of 512 or 256 if len(self.data)
 		# is larger than the self.batch_size threshold. Pass the inputs
 		# (chunks or otherwise) to the BERT model for embedding.
@@ -251,17 +250,9 @@ class BERTDatabase:
 				self.bert(input_tensor)
 				for input_tensor in input_tensors
 			]
-			# print([embeddings.shape for embeddings in embeddings_list])
 			embeddings = tf.concat(embeddings_list, axis=0)
-			# print(embeddings.shape)
 		else:
 			embeddings = self.bert(input_tensor)
-
-		'''
-		# Pass input string tensor to BERT model for embeddings.
-		# Output shape = (len(self.data), 768).
-		embeddings = self.bert(input_tensor)
-		'''
 
 		# Convert embeddings tensor to list? numpy array? Keep as
 		# tf.Tensor?
@@ -269,37 +260,18 @@ class BERTDatabase:
 		# Note that faiss index accepts 2D numpy array of shape
 		# (batch_size, ndims) or in this case (len(embeddings), 768).
 
-		'''
-		# Reset nlist and nprobe values if index.ntotal +
-		# len(embeddings) <= self.nlist. This is an edge case where if
-		# you try to train an index on data smaller than the nlist
-		# (clusters) assigned to it, an error is thrown.
-		if self.index.ntotal + len(embeddings) <= self.nlist:
-			current_total = self.index.ntotal + len(embeddings)
-			if current_total < 100:
-				self.index.nlist = 1
-				self.index.nprobe = 1
-			else:
-				self.index.nlist = self.index.ntotal + len(embeddings)
-				self.index.nprobe = self.index.nlist // 100\
-					if self.index.nlist // 100 > 0 else 1
-		else:
-			self.index.nlist = self.nlist
-			self.index.nprobe = self.nprobe
-		'''
-		# print(f"ntotal before train {self.index.ntotal}")
-
+		# Reset the nlist and nprobe values to adapt appropriately to
+		# the size of the dataset for training. Faiss will throw errors
+		# if len(embeddings) < self.index.nlist (the dataset is smaller
+		# than the number of clusters assigned to it).
 		# self.index.ntotal = number of entries/vectors in index.
 		# len(self.data) = number of entries/pairs in known dataset.
 		# len(embeddings) = embeddings.shape[0] = len(self.data).
 		if len(embeddings) <= self.nlist:
-			# current_total = self.index.ntotal + len(embeddings)
-			# if current_total < 100:
 			if len(embeddings) < 100:
 				self.index.nlist = 1
 				self.index.nprobe = 1
 			else:
-				# self.index.nlist = self.index.ntotal + len(embeddings)
 				self.index.nlist = len(embeddings) // 50
 					if len(embeddings) // 50 > 0 else 1
 				self.index.nprobe = self.index.nlist // 100\
@@ -307,12 +279,6 @@ class BERTDatabase:
 		else:
 			self.index.nlist = self.nlist
 			self.index.nprobe = self.nprobe
-
-		# print(embeddings.shape)
-		# print(self.index.ntotal)
-		# print(self.index.ntotal + len(embeddings) <= self.index.nlist)
-		# print(self.index.nlist)
-		# print(self.index.nprobe)
 
 		# Train index on embeddings.
 		self.index.train(embeddings.numpy())
@@ -659,10 +625,6 @@ def load_dataset_to_db(dataset, db, save_path):
 			# Iterate through each chunk within the section. The
 			# neighbor and continuation entries are the two immediate
 			# chunks next to eachother in the section.
-			# for j in range(len(section) - 1):
-			# 	db.add(
-			# 		(section[j], section[j + 1]), retrain=initial_train
-			# 	)
 			data = [
 				(section[j], section[j + 1]) 
 				for j in range(len(section) - 1)
