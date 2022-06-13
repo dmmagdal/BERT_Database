@@ -272,7 +272,7 @@ class BERTDatabase:
 				self.index.nlist = 1
 				self.index.nprobe = 1
 			else:
-				self.index.nlist = len(embeddings) // 50
+				self.index.nlist = len(embeddings) // 50\
 					if len(embeddings) // 50 > 0 else 1
 				self.index.nprobe = self.index.nlist // 100\
 					if self.index.nlist // 100 > 0 else 1
