@@ -180,15 +180,21 @@ class BERTDatabase:
 		# as the BERT embeddings (768). nlist and nprobe parameters can
 		# be set to something else, but for 1M to 1T tokens, nlist of
 		# 10,000 and nprobe 100 sounds reasonable. May tweak later.
-		ndims = self.bert.outputs[0].shape[-1]
-		nlist = 10_000
-		quantizer = faiss.IndexFlatL2(ndims)
-		self.index = faiss.IndexIVFFlat(quantizer, ndims, nlist)
-		self.index.nprobe = 100
+		self.ndims = self.bert.outputs[0].shape[-1]
+		self.nlist = 10_000
+		self.quantizer = faiss.IndexFlatL2(self.ndims)
+		self.index = faiss.IndexIVFFlat(
+			self.quantizer, self.ndims, self.nlist
+		)
+		self.nprobe = 100
+		self.index.nprobe = self.nprobe
 		self.k = 2
+
+		self.batch_size = 256
 
 		# Save file name for data.
 		self.file = "bert_db_data.pkl"
+		self.index_file = "bert_db_index.pkl"
 
 
 	# Initialize a new BERT model and save it.
@@ -232,9 +238,30 @@ class BERTDatabase:
 			dtype=tf.string
 		)
 
+		# print(len(self.data))
+
+		# Break up inputs into chunks of 512 or 256 if len(self.data)
+		# is larger than the self.batch_size threshold. Pass the inputs
+		# (chunks or otherwise) to the BERT model for embedding.
+		if len(self.data) > self.batch_size:
+			input_tensors = list(
+				divide_chunks(input_tensor, self.batch_size)
+			)
+			embeddings_list = [
+				self.bert(input_tensor)
+				for input_tensor in input_tensors
+			]
+			# print([embeddings.shape for embeddings in embeddings_list])
+			embeddings = tf.concat(embeddings_list, axis=0)
+			# print(embeddings.shape)
+		else:
+			embeddings = self.bert(input_tensor)
+
+		'''
 		# Pass input string tensor to BERT model for embeddings.
 		# Output shape = (len(self.data), 768).
 		embeddings = self.bert(input_tensor)
+		'''
 
 		# Convert embeddings tensor to list? numpy array? Keep as
 		# tf.Tensor?
@@ -242,8 +269,52 @@ class BERTDatabase:
 		# Note that faiss index accepts 2D numpy array of shape
 		# (batch_size, ndims) or in this case (len(embeddings), 768).
 
+		'''
+		# Reset nlist and nprobe values if index.ntotal +
+		# len(embeddings) <= self.nlist. This is an edge case where if
+		# you try to train an index on data smaller than the nlist
+		# (clusters) assigned to it, an error is thrown.
+		if self.index.ntotal + len(embeddings) <= self.nlist:
+			current_total = self.index.ntotal + len(embeddings)
+			if current_total < 100:
+				self.index.nlist = 1
+				self.index.nprobe = 1
+			else:
+				self.index.nlist = self.index.ntotal + len(embeddings)
+				self.index.nprobe = self.index.nlist // 100\
+					if self.index.nlist // 100 > 0 else 1
+		else:
+			self.index.nlist = self.nlist
+			self.index.nprobe = self.nprobe
+		'''
+		# print(f"ntotal before train {self.index.ntotal}")
+
+		# self.index.ntotal = number of entries/vectors in index.
+		# len(self.data) = number of entries/pairs in known dataset.
+		# len(embeddings) = embeddings.shape[0] = len(self.data).
+		if len(embeddings) <= self.nlist:
+			# current_total = self.index.ntotal + len(embeddings)
+			# if current_total < 100:
+			if len(embeddings) < 100:
+				self.index.nlist = 1
+				self.index.nprobe = 1
+			else:
+				# self.index.nlist = self.index.ntotal + len(embeddings)
+				self.index.nlist = len(embeddings) // 50
+					if len(embeddings) // 50 > 0 else 1
+				self.index.nprobe = self.index.nlist // 100\
+					if self.index.nlist // 100 > 0 else 1
+		else:
+			self.index.nlist = self.nlist
+			self.index.nprobe = self.nprobe
+
+		# print(embeddings.shape)
+		# print(self.index.ntotal)
+		# print(self.index.ntotal + len(embeddings) <= self.index.nlist)
+		# print(self.index.nlist)
+		# print(self.index.nprobe)
+
 		# Train index on embeddings.
-		print(embeddings)
 		self.index.train(embeddings.numpy())
 
 
@@ -263,9 +334,9 @@ class BERTDatabase:
 
 		# A few assertions to for type checking and validating the keys
 		# list is not empty.
-		assert isinstance(keys, list)
-		assert len(keys) > 0
-		assert all(isinstance(query, str) for query in keys)
+		assert isinstance(keys, list), f"Queries expected to be a list of strings."
+		assert len(keys) > 0, f"Require number of queries to be greater than 0. Recieved: {len(keys)}"
+		assert all(isinstance(query, str) for query in keys), f"All queries in list are expected to be strings."
 
 		# Create a temporary list of all the entries to be parallel
 		# with the (entry, continuation) tuples in self.data.
@@ -307,16 +378,16 @@ class BERTDatabase:
 			isinstance(text, str) for text in input_pairs
 		)
 		if isinstance(input_pairs, tuple) and all_text_is_str:
-			input_texts = [input_texts]
+			input_pairs = [input_pairs]
 
 		# A few assertions to for type checking and validating the
 		# input_pairs list is not empty.
-		assert isinstance(input_pairs, list)
-		assert len(input_pairs) > 0
+		assert isinstance(input_pairs, list), f"Input pairs expected to be a list of string tuples."
+		assert len(input_pairs) > 0, f"Require number of input pairs to be greater than 0. Recieved: {len(input_pairs)}"
 		assert all(
 			all(isinstance(text, str) for text in pair) 
 			for pair in input_pairs
-		)
+		), f"Not all inputs are strings in {input_pairs}."
 
 		# Create a temporary list of all the entries to be parallel
 		# with the (entry, continuation) tuples in self.data.
@@ -354,13 +425,15 @@ class BERTDatabase:
 		# trained on the data embeddings if it is empty BEFORE adding
 		# the data.
 		if retrain:
-			self.retrain()
+			self.train_index()
 
 		# Add new embeddings to index. Be sure to stack the tensor
 		# embeddings to create a new tensor of shape
 		# (len(embeddings), 768).
 		if len(embeddings) != 0:
 			self.index.add(tf.stack(embeddings, axis=0).numpy())
+			assert len(self.data) == self.index.ntotal, f"Number of embedings in index should match dataset size. Index embeddings {self.index.ntotal}, Dataset size: {len(self.data)}"
+
 
 
 	# Delete (entry, continuation) pairs from the database given the
@@ -380,9 +453,9 @@ class BERTDatabase:
 
 		# A few assertions to for type checking and validating the keys
 		# list is not empty.
-		assert isinstance(keys, list)
-		assert len(keys) > 0
-		assert all(isinstance(query, str) for query in keys)
+		assert isinstance(keys, list), f"Queries expected to be a list of strings."
+		assert len(keys) > 0, f"Require number of queries to be greater than 0. Recieved: {len(keys)}"
+		assert all(isinstance(query, str) for query in keys), f"All queries in list are expected to be strings."
 
 		# Create a temporary list of all the entries to be parallel
 		# with the (entry, continuation) tuples in self.data.
@@ -414,7 +487,7 @@ class BERTDatabase:
 		# Remove embeddings from index. Be sure to stack the tensor
 		# embeddings to create a new tensor of shape
 		# (len(embeddings), 768).
-		if len(embedding) != 0:
+		if len(embeddings) != 0:
 			# Unable to use remove_ids(). Documentation around faiss is
 			# hard to read so understanding why that function does not
 			# work is very tough. Did see that reset() should clear out
@@ -429,7 +502,7 @@ class BERTDatabase:
 
 		# Retrain the index if specified.
 		if retrain:
-			self.retrain()
+			self.train_index()
 
 
 	# Retrieve the k nearest neighbors from the given input.
@@ -446,9 +519,9 @@ class BERTDatabase:
 
 		# A few assertions to for type checking and validating the
 		# input_texts list is not empty.
-		assert isinstance(input_texts, list)
-		assert len(input_texts) > 0
-		assert all(isinstance(query, str) for query in input_texts)
+		assert isinstance(input_texts, list), f"Queries expected to be a list of strings."
+		assert len(input_texts) > 0, f"Require number of queries to be greater than 0. Recieved: {len(input_texts)}"
+		assert all(isinstance(query, str) for query in input_texts), f"All queries in list are expected to be strings."
 
 		# Convert string list to tensor.
 		input_tensor = tf.convert_to_tensor(
@@ -485,7 +558,29 @@ class BERTDatabase:
 
 		# Load from full path with pickle.
 		full_path = os.path.join(path, self.file)
-		self.data = pickle.load(open(full_path, "rb"))
+		full_index_path = os.path.join(path, self.index_file)
+
+		# Load data.
+		# self.data = pickle.load(open(full_path, "rb"))
+		with open(os.path.join(path, "data.json"), "r") as f:
+			self.data = json.load(f)
+		self.data = [tuple(pair) for pair in self.data]
+
+		# Insert another note. Currently having issues loading in the
+		# index from the saved file with faiss. To get the project
+		# moving along, the index will not be saved, but will be
+		# re-trained with the loaded in data. This will also be
+		# another costly decision that I hope to rectify soon in the
+		# future.
+		self.add(self.data, retrain=True)
+
+		# Load index.
+		# self.index = pickle.load(open(full_index_path, "rb"))
+		# self.index = faiss.read_index(
+		# 	os.path.join(path, "bert_db.index"),
+		# 	faiss.IO_FLAG_ONDISK_SAME_DIR
+		# )
+		# self.index = faiss.deserialize_index(np.load("index.npy"))
 
 
 	# Save the database.
@@ -498,7 +593,43 @@ class BERTDatabase:
 
 		# Write to full path with pickle.
 		full_path = os.path.join(path, self.file)
-		pickle.dump(self.data, open(full_path, "wb+"))
+		full_index_path = os.path.join(path, self.index_file)
+
+		# Another note here. Currently, on a small dataset (see test
+		# code below under if __name__ == '__main__'), .pkl and .index
+		# files are the same size for the index. It appears neither is
+		# more "efficient" in terms of space usage. The same also can
+		# be observed for the .pkl and .json files for the data. Will
+		# currently use native .json and .index file formats for the
+		# respective data unless there are updates or new findings to
+		# show a more efficient way to store each.
+
+		# Save data.
+		# pickle.dump(self.data, open(full_path, "wb+"))
+		with open(os.path.join(path, "data.json"), "w+") as f:
+			json.dump(self.data, f, indent=4)
+
+		# Save index.
+		# pickle.dump(self.index, open(full_index_path, "wb+"))
+		# faiss.write_index(
+		# 	self.index, os.path.join(path, "bert_db.index")
+		# )
+		# chunk = faiss.serialize_index(self.index)
+		# np.save("index.npy", chunk)
+		# print(dir(faiss))
+		# print(dir(self.index))
+
+
+# Divide a iist of texts into chunks of size n.
+# @param: text_list, a list of texts (string) that is going to be
+#	divided into even chunks.
+# @param: n, the max size of the chunk.
+# @return: returns (yields) a tensor of shape (n,).
+def divide_chunks(text_list, n):
+	# Divide up the list of tokens in the text to equal shapes of size
+	# n.
+	for i in range(0, len(text_list), n):
+		yield text_list[i:i + n]
 
 
 # Given a list of list of strings containing the chunked tokens (from
@@ -508,9 +639,11 @@ class BERTDatabase:
 #	that is to be loaded into the BERT database.
 # @param: db, the BERT database that this data is going to be loaded
 #	into.
+# @param: save_path, the path to save the BERT database (this is for
+#	loading very large datasets).
 # @return: returns the BERT database (db) instance now loaded with all
 #	the data passed in from the list of string tensors (dataset).
-def load_dataset_to_db(dataset, db):
+def load_dataset_to_db(dataset, db, save_path):
 	# Iterate through each item in the main list. These items can be
 	# considered sections (usually they're a paragraph of text).
 	print("Loading dataset to BERT database...")
@@ -526,15 +659,24 @@ def load_dataset_to_db(dataset, db):
 			# Iterate through each chunk within the section. The
 			# neighbor and continuation entries are the two immediate
 			# chunks next to eachother in the section.
-			for j in range(len(section) - 1):
-				db.add(
-					(section[j], section[j + 1]), retrain=initial_train
-				)
+			# for j in range(len(section) - 1):
+			# 	db.add(
+			# 		(section[j], section[j + 1]), retrain=initial_train
+			# 	)
+			data = [
+				(section[j], section[j + 1]) 
+				for j in range(len(section) - 1)
+			]
+			db.add(data, retrain=initial_train)
 
 		# Retrain index every 250 sections (not necessarily every 250
-		# entries).
+		# entries). 
 		if i % 250 == 0:
 			db.train_index()
+
+		# Save every 1000 sections (for large datasets).
+		if i % 1000 == 0:
+			db.save(save_path)
 
 	# Return the database.
 	print("Dataset loaded.")
@@ -620,16 +762,16 @@ if __name__ == '__main__':
 	print("-" * 72)
 
 	# Attempt to remove an entry with a valid key (batch removal).
-	valid_response = db.remove([entries[2]])
-
-	# Attempt to remove an entry with a valid key (single removal).
 	valid_response = db.remove(entries[3:5])
 
+	# Attempt to remove an entry with a valid key (single removal).
+	valid_response = db.remove([entries[2]])
+
 	# Attempt to remove an entry with an invalid key (batch removal).
-	invalid_response = db.remove([invalid_entries[0]])
+	invalid_response = db.remove(invalid_entries[:2])
 
 	# Attempt to remove an entry with an invalid key (single removal).
-	invalid_response = db.remove(invalid_entries[:2])
+	invalid_response = db.remove([invalid_entries[0]])
 
 	# Attempt to remove an entry with both a valid and an invalid key
 	# (batch removal only).
@@ -646,27 +788,38 @@ if __name__ == '__main__':
 	db.add(list(zip(entries, values)))
 	
 	# Get KNN entries from batch.
+	print("Query:")
+	print(
+		[
+			"I don't like sand.", 
+			"I am a jedi, like my father before me."
+		]
+	)
 	knn = db.get_knn(
 		[
 			"I don't like sand.", 
 			"I am a jedi, like my father before me."
 		]
 	)
+	print("Results:")
 	print(knn)
 
 	# Get KNN entries from a single sample.
+	print("Query:")
+	print(["The senate will decide your fate."])
 	knn = db.get_knn(["The senate will decide your fate."])
+	print("Results:")
 	print(knn)
 
 	print("-" * 72)
 
-	'''
 	# Test database save function.
 	db.save("./BERT_DB")
 
 	# Test database load function.
 	db_copy = BERTDatabase()
 	db_copy.load("./BERT_DB")
+	'''
 
 	# Verify database save and load match.
 	values1 = [v for k, v in db.data.items()]

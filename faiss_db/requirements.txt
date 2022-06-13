@@ -1,5 +1,5 @@
 datasets>=2.0.0
-faiss-cpu
+faiss-cpu==1.7.2
 numpy>=1.19.5
 tensorflow==2.7.0
 tensorflow-datasets>=4.2.0
