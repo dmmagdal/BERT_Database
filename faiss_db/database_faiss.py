@@ -461,9 +461,14 @@ class BERTDatabase:
 			# If that is correct, then this does provide a solution to
 			# the problem, but makes removes very expensive because
 			# all items in self.data must be re-added to the index.
+			# Also reset the self.data list so that the embeddings/
+			# entries are re-added properly. Again, this makes the
+			# operation VERY expensive.
 			#self.index.remove_ids(tf.stack(embeddings, axis=0).numpy())
 			self.index.reset()
-			self.add(self.data)
+			remaining_data = self.data
+			self.data = []
+			self.add(remaining_data)
 
 		# Retrain the index if specified.
 		if retrain:
@@ -678,6 +683,7 @@ if __name__ == '__main__':
 	# Initialize and train index.
 	db.data = list(zip(entries, values))
 	db.train_index()
+	db.data = []
 
 	# Input data in a batch.
 	neighbors = entries[:6]
@@ -692,8 +698,8 @@ if __name__ == '__main__':
 	db.add(pairs)
 
 	# Input data using a key that already exists.
-	neighbors = entries[4:7]
-	continuations = values[4:7]
+	neighbors = entries[4:6]
+	continuations = values[4:6]
 	pairs = list(zip(neighbors, continuations))
 	db.add(pairs)
 
@@ -747,7 +753,6 @@ if __name__ == '__main__':
 	# Start by populating the entire database with all (key, value)
 	# pairs. Be sure to reset the contents of the index before
 	# populating it.
-	db.index.reset()
 	db.add(list(zip(entries, values)))
 	
 	# Get KNN entries from batch.
@@ -782,6 +787,13 @@ if __name__ == '__main__':
 	# Test database load function.
 	db_copy = BERTDatabase()
 	db_copy.load("./BERT_DB")
+
+	# Verify database content is the same. This is not the best way
+	# to validate loading because the index can be in a different
+	# "trained" state (index in the loaded database is always retrained
+	# on the full dataset which may not be true for the initial
+	# database).
+	print(f"Database contents align: {db.data == db_copy.data}")
 
 	# Exit the program.
 	exit(0)
