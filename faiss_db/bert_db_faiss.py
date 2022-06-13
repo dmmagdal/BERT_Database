@@ -631,9 +631,9 @@ def load_dataset_to_db(dataset, db, save_path):
 			]
 			db.add(data, retrain=initial_train)
 
-		# Retrain index every 250 sections (not necessarily every 250
-		# entries). 
-		if i % 250 == 0:
+		# Retrain index every 250 or 500 sections (not necessarily
+		# every 250/500 entries). 
+		if i % 500 == 0:
 			db.train_index()
 
 		# Save every 1000 sections (for large datasets).
@@ -781,26 +781,6 @@ if __name__ == '__main__':
 	# Test database load function.
 	db_copy = BERTDatabase()
 	db_copy.load("./BERT_DB")
-	'''
-
-	# Verify database save and load match.
-	values1 = [v for k, v in db.data.items()]
-	values2 = [v for k, v in db_copy.data.items()]
-	value_comparisions = [v1 == v2 for v1, v2 in zip(values1, values2)]
-
-	keys1 = [k.deref() for k in db.data.keys()]
-	keys2 = [k.deref() for k in db_copy.data.keys()]
-	key_comparisions = [
-		tf.reduce_all(tf.equal(k1, k2)) 
-		for k1, k2 in zip(keys1, keys2)
-	]
-
-	# This is a weak way of comparing the databases to see if they
-	# match, but it's the best I've got.
-	all_keys_match = tf.reduce_all(value_comparisions).numpy()
-	all_values_match = tf.reduce_all(key_comparisions).numpy()
-	print(f"Saved database matches loaded database: {all_keys_match == all_values_match}")
-	'''
 
 	# Exit the program.
 	exit(0)
