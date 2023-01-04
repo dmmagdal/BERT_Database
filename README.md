@@ -31,8 +31,13 @@ It is also important to note that the documentation for annoy is isolated to the
 
 
 There are a few caveats to the annoy database implementation:
- - The first major difference is that annoy does not support deleting items from the index. There is the option to zero out values at a position `i` in the index where the vector `v` is stored, however that is a great waste of space so only adding items is supported. 
+ - The first major difference is that annoy does not support deleting items from the index (see [here](https://github.com/spotify/annoy/issues/191)). There is the option to zero out values at a position `i` in the index where the vector `v` is stored, however that is a great waste of space so only adding items is supported. 
  - The next major caveat is that once the `build()` function is called, no new items can be added. So calling that function must happen **ONLY AFTER** all relevant data has been added to the database.
+
+Some additional notes and resources on ANNOY:
+ - There are several distance metrics supported for the AnnoyIndex such as Euclidean (`"euclidean"`) distance, Manhattan (`"manhattan"`) distance, cosine (`"angular"`) distance, Hamming (`"hamming"`) distance, or Dot (Inner) Product (`"dot"`) distance.
+ - Here is the module page on [pypi](https://pypi.org/project/annoy/). It should have a lot of the same documentation as the README shown in the main [GitHub](https://github.com/spotify/annoy) page.
+ - [Here](https://www.tensorflow.org/hub/tutorials/semantic_approximate_nearest_neighbors) is an example in Tensorflow which uses ANNOY and text embeddings (similar to what is done here in this repo). There is an [updated implementation](https://github.com/tensorflow/hub/blob/master/examples/colab/tf2_semantic_approximate_nearest_neighbors.ipynb) that is in Tensorflow 2.
 ----End of entry----
 
 
