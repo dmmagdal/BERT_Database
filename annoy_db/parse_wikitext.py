@@ -12,7 +12,7 @@ import tensorflow as tf
 from datasets import load_dataset
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
-from database_annoy import *
+from database_annoy import BERTDatabase, load_dataset_to_db
 
 
 # Divide a tensor of shape (max_seq_len,) into chunks of size n.
@@ -135,9 +135,9 @@ def main():
 			chunked_dataset += chunked_dataset_output
 			print(f"Number of sections in dataset: {len(chunked_dataset_output)}")
 
-	# Initialize BERT database. Load dataset to databse.
+	# Initialize BERT database. Load dataset to database.
 	db = BERTDatabase(initialize_model=True)
-	db = load_dataset_to_db(chunked_dataset, db, "./wikitext-BERT_DB")
+	db = load_dataset_to_db(chunked_dataset, db, build_index=True)
 	db.save("./wikitext-BERT_DB")
 
 	# Exit the program.

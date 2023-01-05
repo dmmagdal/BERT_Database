@@ -603,7 +603,7 @@ def divide_chunks(text_list, n):
 
 
 # Given a list of list of strings containing the chunked tokens (from
-# the text).
+# the text), populate the specified database.
 # @param: dataset, List[List[str]], each element is a list of strings
 #	from the input dataset. This is the expected format for all data
 #	that is to be loaded into the BERT database.
