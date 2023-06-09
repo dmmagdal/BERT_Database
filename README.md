@@ -56,3 +56,9 @@ It is also important to note that the documentation for faiss is isolated to the
 The subfolder called `scann_db/` contains an implementation of the BERT database using the ScaNN (Scalable Nearest Neighbors) library from Google for faster vector similarity search.
 
 This implementation is still a WIP. Will update more when functionality is similar to base implementation or `faiss_db/` implementation.
+
+
+### Additional References
+
+ - Comprehensive Guide To Approximate Nearest Neighbors Algorithms [medium article](https://towardsdatascience.com/comprehensive-guide-to-approximate-nearest-neighbors-algorithms-8b94f057d6b6)
+ - Vald: A highly scalable distributed fast approximate nearest neighbor dense vector search engine [medium article](https://medium.com/geekculture/vald-a-highly-scalable-distributed-fast-approximate-nearest-neighbour-dense-vector-search-engine-af1946a4a37)
